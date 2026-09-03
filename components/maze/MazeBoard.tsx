@@ -87,7 +87,8 @@ export const MazeBoard: React.FC<MazeBoardProps> = ({
       if (keys.backward) targetTiltX += MAX_TILT;
       // A / Left: tilts board left (positive rotation on Z axis lowers left)
       if (keys.left) targetTiltZ += MAX_TILT;
-      if (keys.right) targetTiltZ += MAX_TILT;
+      // D / Right: tilts board right (negative rotation on Z axis lowers right)
+      if (keys.right) targetTiltZ -= MAX_TILT;
 
       // Add virtual joystick / on-screen touch tilt input if present
       if (virtualTilt) {
@@ -98,14 +99,14 @@ export const MazeBoard: React.FC<MazeBoardProps> = ({
       }
     }
 
-    // Rate-limit delta tilt to realistic mechanical knob slew speed to prevent catapult effect
-    const maxDelta = MAX_TILT_SPEED * dt;
-    const diffX = targetTiltX - currentTiltX.current;
-    const diffZ = targetTiltZ - currentTiltZ.current;
-    currentTiltX.current += Math.max(-maxDelta, Math.min(maxDelta, diffX));
-    currentTiltZ.current += Math.max(-maxDelta, Math.min(maxDelta, diffZ));
+    // Frame-based lerp (exponential smoothing) for seamless continuous rotation
+    // Prevents instant physics state updates and eliminates snapping or jumping
+    const TILT_LERP_SPEED = 7.0;
+    const lerpAlpha = 1.0 - Math.exp(-TILT_LERP_SPEED * dt);
+    currentTiltX.current = THREE.MathUtils.lerp(currentTiltX.current, targetTiltX, lerpAlpha);
+    currentTiltZ.current = THREE.MathUtils.lerp(currentTiltZ.current, targetTiltZ, lerpAlpha);
 
-    // Sync tilt to ref for mechanical cabinet knob animations
+    // Sync tilt to ref for mechanical cabinet knob animations and scene effects
     if (tiltRef?.current) {
       tiltRef.current.x = currentTiltX.current;
       tiltRef.current.z = currentTiltZ.current;

@@ -171,8 +171,7 @@ export const RealisticMarble: React.FC<RealisticMarbleProps> = ({
       onPositionUpdate(currentPos, currentVel);
     }
 
-    // Anti-jumping grounding stabilizer: keep marble naturally rolling on the wood surface
-    // Calculate position and velocity in the board's tilted local reference frame
+    // Grounding and boundary safety: preserve natural Rapier physics simulation without abrupt state overwrites
     if (tiltRef?.current) {
       const tiltX = tiltRef.current.x;
       const tiltZ = tiltRef.current.z;
@@ -180,32 +179,10 @@ export const RealisticMarble: React.FC<RealisticMarbleProps> = ({
       const boardQuat = new THREE.Quaternion().setFromEuler(boardEuler);
       const invBoardQuat = boardQuat.clone().invert();
 
-      // Board-relative position and velocity
+      // Board-relative position
       const localPos = new THREE.Vector3(pos.x, pos.y, pos.z).applyQuaternion(invBoardQuat);
-      const localVel = new THREE.Vector3(vel.x, vel.y, vel.z).applyQuaternion(invBoardQuat);
 
-      // In local coordinates:
-      // floor top is at y = 0.000. Marble resting on floor has localPos.y = MARBLE_RADIUS (0.32).
-      // If marble begins separating from the floor (localVel.y > 0.04), clamp normal separation velocity
-      if (localVel.y > 0.04) {
-        localVel.y = Math.min(localVel.y * 0.05, 0.02);
-        const correctedWorldVel = localVel.applyQuaternion(boardQuat);
-        rigidBodyRef.current.setLinvel(
-          { x: correctedWorldVel.x, y: correctedWorldVel.y, z: correctedWorldVel.z },
-          true
-        );
-      }
-
-      // If marble is floating slightly above the floor surface, apply a gentle grounding pull
-      if (localPos.y > MARBLE_RADIUS + 0.008 && localPos.y < MARBLE_RADIUS + 0.5) {
-        const boardNormal = new THREE.Vector3(0, 1, 0).applyQuaternion(boardQuat);
-        rigidBodyRef.current.applyImpulse(
-          { x: -boardNormal.x * 0.015, y: -boardNormal.y * 0.015, z: -boardNormal.z * 0.015 },
-          true
-        );
-      }
-
-      // Safety bounds check relative to the playing tray
+      // Safety bounds check relative to the playing tray: reset if fallen out of tray
       const maxExt = 5.2;
       if (
         localPos.y < -1.2 ||
@@ -221,13 +198,7 @@ export const RealisticMarble: React.FC<RealisticMarbleProps> = ({
         rigidBodyRef.current.setAngvel({ x: 0, y: 0, z: 0 }, true);
       }
     } else {
-      // Fallback world-space grounding
-      if (vel.y > 0.15) {
-        rigidBodyRef.current.setLinvel(
-          { x: vel.x, y: Math.min(vel.y * 0.1, 0.05), z: vel.z },
-          true
-        );
-      }
+      // Fallback world-space bounds check
       if (pos.y < -3 || Math.abs(pos.x) > 15 || Math.abs(pos.z) > 15) {
         rigidBodyRef.current.setTranslation(
           { x: startPos[0], y: startPos[1] + 0.1, z: startPos[2] },
