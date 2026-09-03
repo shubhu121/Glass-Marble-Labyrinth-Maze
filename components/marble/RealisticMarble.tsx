@@ -6,6 +6,7 @@ import { useFrame } from '@react-three/fiber';
 import { RigidBody, RapierRigidBody, BallCollider } from '@react-three/rapier';
 import { ProceduralTextureGenerator } from '@/lib/procedural-textures';
 import { soundManager } from '@/lib/sound-effects';
+import { MarblePaletteId, getMarblePalette } from '@/lib/marble-palettes';
 
 interface RealisticMarbleProps {
   startPos: [number, number, number];
@@ -16,6 +17,7 @@ interface RealisticMarbleProps {
   onGoalCheck?: (pos: THREE.Vector3) => void;
   slowMo?: boolean;
   tiltRef?: React.RefObject<{ x: number; z: number }>;
+  paletteId?: MarblePaletteId;
 }
 
 export const MARBLE_RADIUS = 0.32;
@@ -46,9 +48,12 @@ export const RealisticMarble: React.FC<RealisticMarbleProps> = ({
   onGoalCheck,
   slowMo = false,
   tiltRef,
+  paletteId = 'ocean-blue',
 }) => {
   const rigidBodyRef = useRef<RapierRigidBody>(null);
   const marbleGroupRef = useRef<THREE.Group>(null);
+  const glassMaterialRef = useRef<THREE.MeshPhysicalMaterial>(null);
+  const filamentMaterialRef = useRef<THREE.MeshStandardMaterial>(null);
   const lastVelocityMag = useRef<number>(0);
   const lastPos = useRef<THREE.Vector3>(new THREE.Vector3());
 
@@ -57,7 +62,7 @@ export const RealisticMarble: React.FC<RealisticMarbleProps> = ({
     return ProceduralTextureGenerator.getMarbleImperfectionsTexture();
   }, []);
 
-  // Generate 3 elegant internal glass ribbon swirls (Crimson, Cobalt, Amber)
+  // Generate 3 elegant internal glass ribbon swirls
   const swirlGeometries = useMemo(() => {
     const sw1 = createSwirlCurve(0, MARBLE_RADIUS * 0.75, MARBLE_RADIUS * 1.6);
     const sw2 = createSwirlCurve((Math.PI * 2) / 3, MARBLE_RADIUS * 0.68, MARBLE_RADIUS * 1.55);
@@ -76,6 +81,107 @@ export const RealisticMarble: React.FC<RealisticMarbleProps> = ({
       swirlGeometries.forEach((g) => g.dispose());
     };
   }, [swirlGeometries]);
+
+  // Create custom ShaderMaterials for the internal glass swirl ribbons
+  const swirlMaterials = useMemo(() => {
+    const initialPalette = getMarblePalette(paletteId);
+    return [0, 1, 2].map((idx) => {
+      return new THREE.ShaderMaterial({
+        uniforms: {
+          uPrimaryColor: { value: new THREE.Color(initialPalette.primary) },
+          uSecondaryColor: { value: new THREE.Color(initialPalette.secondary) },
+          uAccentColor: { value: new THREE.Color(initialPalette.accent) },
+          uEmissiveColor: { value: new THREE.Color(initialPalette.emissive) },
+          uEmissiveIntensity: { value: initialPalette.emissiveIntensity },
+          uOpacity: { value: 0.95 },
+          uRibbonIndex: { value: idx },
+          uTime: { value: 0.0 },
+        },
+        vertexShader: `
+          varying vec3 vNormal;
+          varying vec3 vViewPosition;
+          varying vec2 vUv;
+          varying vec3 vWorldPosition;
+
+          void main() {
+            vUv = uv;
+            vNormal = normalize(normalMatrix * normal);
+            vec4 worldPos = modelMatrix * vec4(position, 1.0);
+            vWorldPosition = worldPos.xyz;
+            vec4 mvPosition = viewMatrix * worldPos;
+            vViewPosition = -mvPosition.xyz;
+            gl_Position = projectionMatrix * mvPosition;
+          }
+        `,
+        fragmentShader: `
+          uniform vec3 uPrimaryColor;
+          uniform vec3 uSecondaryColor;
+          uniform vec3 uAccentColor;
+          uniform vec3 uEmissiveColor;
+          uniform float uEmissiveIntensity;
+          uniform float uOpacity;
+          uniform float uRibbonIndex;
+          uniform float uTime;
+
+          varying vec3 vNormal;
+          varying vec3 vViewPosition;
+          varying vec2 vUv;
+          varying vec3 vWorldPosition;
+
+          void main() {
+            vec3 normal = normalize(vNormal);
+            vec3 viewDir = normalize(vViewPosition);
+
+            // Ribbon longitudinal curve coordinate
+            float t = vUv.x;
+            
+            // Custom dominant color distribution per ribbon index
+            vec3 c1 = uPrimaryColor;
+            vec3 c2 = uSecondaryColor;
+            vec3 c3 = uAccentColor;
+            
+            if (uRibbonIndex > 1.5) {
+              c1 = uAccentColor;
+              c2 = uPrimaryColor;
+              c3 = uSecondaryColor;
+            } else if (uRibbonIndex > 0.5) {
+              c1 = uSecondaryColor;
+              c2 = uAccentColor;
+              c3 = uPrimaryColor;
+            }
+
+            // Helical gradient along ribbon length with gentle phase oscillation
+            float wave = sin(t * 3.14159 * 2.0 + uTime * 0.4) * 0.5 + 0.5;
+            vec3 baseColor = mix(c1, c2, mix(t, wave, 0.3));
+            
+            // Internal optical Fresnel edge brilliance inside the glass
+            float fresnel = pow(1.0 - max(dot(viewDir, normal), 0.0), 2.2);
+            baseColor = mix(baseColor, c3, fresnel * 0.55);
+
+            // Directional specular highlights
+            vec3 lightDir = normalize(vec3(0.5, 1.0, 0.7));
+            float diff = max(dot(normal, lightDir), 0.0) * 0.55 + 0.45;
+
+            vec3 halfDir = normalize(lightDir + viewDir);
+            float spec = pow(max(dot(normal, halfDir), 0.0), 28.0) * 0.35;
+
+            vec3 finalColor = baseColor * diff + uEmissiveColor * uEmissiveIntensity + vec3(spec);
+            gl_FragColor = vec4(finalColor, uOpacity);
+          }
+        `,
+        transparent: true,
+        side: THREE.DoubleSide,
+      });
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Dispose shader materials on unmount
+  useEffect(() => {
+    return () => {
+      swirlMaterials.forEach((m) => m.dispose());
+    };
+  }, [swirlMaterials]);
 
   // Internal micro air bubbles trapped inside the glass
   const bubblePositions = useMemo(() => {
@@ -171,6 +277,42 @@ export const RealisticMarble: React.FC<RealisticMarbleProps> = ({
       onPositionUpdate(currentPos, currentVel);
     }
 
+    // Dynamically update shader uniforms with frame-rate independent interpolation for fluid color transitions
+    const palette = getMarblePalette(paletteId);
+    const colorLerp = 1.0 - Math.exp(-7.0 * delta);
+
+    const targetPrimary = new THREE.Color(palette.primary);
+    const targetSecondary = new THREE.Color(palette.secondary);
+    const targetAccent = new THREE.Color(palette.accent);
+    const targetEmissive = new THREE.Color(palette.emissive);
+
+    swirlMaterials.forEach((mat) => {
+      mat.uniforms.uPrimaryColor.value.lerp(targetPrimary, colorLerp);
+      mat.uniforms.uSecondaryColor.value.lerp(targetSecondary, colorLerp);
+      mat.uniforms.uAccentColor.value.lerp(targetAccent, colorLerp);
+      mat.uniforms.uEmissiveColor.value.lerp(targetEmissive, colorLerp);
+      mat.uniforms.uEmissiveIntensity.value = THREE.MathUtils.lerp(
+        mat.uniforms.uEmissiveIntensity.value,
+        palette.emissiveIntensity,
+        colorLerp
+      );
+      mat.uniforms.uTime.value += delta;
+    });
+
+    if (glassMaterialRef.current) {
+      glassMaterialRef.current.attenuationColor.lerp(
+        new THREE.Color(palette.glassAttenuation),
+        colorLerp
+      );
+    }
+
+    if (filamentMaterialRef.current) {
+      filamentMaterialRef.current.color.lerp(
+        new THREE.Color(palette.coreFilament),
+        colorLerp
+      );
+    }
+
     // Grounding and boundary safety: preserve natural Rapier physics simulation without abrupt state overwrites
     if (tiltRef?.current) {
       const tiltX = tiltRef.current.x;
@@ -242,12 +384,13 @@ export const RealisticMarble: React.FC<RealisticMarbleProps> = ({
         <mesh castShadow receiveShadow>
           <sphereGeometry args={[MARBLE_RADIUS, 48, 32]} />
           <meshPhysicalMaterial
+            ref={glassMaterialRef}
             roughness={0.03}
             metalness={0.0}
             transmission={0.96}
             ior={1.52} // Borosilicate glass optical refraction index
             thickness={MARBLE_RADIUS * 1.5}
-            attenuationColor="#edf6f9"
+            attenuationColor={getMarblePalette(paletteId).glassAttenuation}
             attenuationDistance={1.8}
             specularIntensity={1.0}
             specularColor="#ffffff"
@@ -259,47 +402,26 @@ export const RealisticMarble: React.FC<RealisticMarbleProps> = ({
           />
         </mesh>
 
-        {/* Internal Swirl 1: Vivid Venetian Ruby Crimson */}
-        <mesh geometry={swirlGeometries[0]} castShadow>
-          <meshStandardMaterial
-            color="#c5162a"
-            emissive="#3a0408"
-            emissiveIntensity={0.12}
-            roughness={0.15}
-            metalness={0.05}
-            transparent={true}
-            opacity={0.95}
-            side={THREE.DoubleSide}
-          />
-        </mesh>
+        {/* Internal Swirl 1: Dynamic Shader Material */}
+        <mesh
+          geometry={swirlGeometries[0]}
+          material={swirlMaterials[0]}
+          castShadow
+        />
 
-        {/* Internal Swirl 2: Deep Cobalt Marine Blue */}
-        <mesh geometry={swirlGeometries[1]} castShadow>
-          <meshStandardMaterial
-            color="#1249b8"
-            emissive="#041030"
-            emissiveIntensity={0.15}
-            roughness={0.15}
-            metalness={0.05}
-            transparent={true}
-            opacity={0.95}
-            side={THREE.DoubleSide}
-          />
-        </mesh>
+        {/* Internal Swirl 2: Dynamic Shader Material */}
+        <mesh
+          geometry={swirlGeometries[1]}
+          material={swirlMaterials[1]}
+          castShadow
+        />
 
-        {/* Internal Swirl 3: Warm Amber Sunburst */}
-        <mesh geometry={swirlGeometries[2]} castShadow>
-          <meshStandardMaterial
-            color="#e58910"
-            emissive="#301802"
-            emissiveIntensity={0.1}
-            roughness={0.15}
-            metalness={0.05}
-            transparent={true}
-            opacity={0.95}
-            side={THREE.DoubleSide}
-          />
-        </mesh>
+        {/* Internal Swirl 3: Dynamic Shader Material */}
+        <mesh
+          geometry={swirlGeometries[2]}
+          material={swirlMaterials[2]}
+          castShadow
+        />
 
         {/* Internal Trapped Micro Air Bubbles */}
         {bubblePositions.map((b, idx) => (
@@ -321,7 +443,8 @@ export const RealisticMarble: React.FC<RealisticMarbleProps> = ({
             args={[MARBLE_RADIUS * 0.04, MARBLE_RADIUS * 0.04, MARBLE_RADIUS * 1.5, 8]}
           />
           <meshStandardMaterial
-            color="#f4eedb"
+            ref={filamentMaterialRef}
+            color={getMarblePalette(paletteId).coreFilament}
             roughness={0.2}
             transparent={true}
             opacity={0.6}

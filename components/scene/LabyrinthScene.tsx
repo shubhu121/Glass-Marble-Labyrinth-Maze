@@ -12,6 +12,7 @@ import { MazeBoard } from '@/components/maze/MazeBoard';
 import { OuterCabinet } from '@/components/maze/OuterCabinet';
 import { ProceduralTextureGenerator } from '@/lib/procedural-textures';
 import { RefreshCw, AlertTriangle } from 'lucide-react';
+import { MarblePaletteId } from '@/lib/marble-palettes';
 
 interface LabyrinthSceneProps {
   maze: MazeData;
@@ -25,6 +26,7 @@ interface LabyrinthSceneProps {
   onGoalReached: () => void;
   gameStatus: 'playing' | 'completed';
   colliderMode?: 'trimesh' | 'convex-hull';
+  marblePalette?: MarblePaletteId;
 }
 
 // Internal scene content with camera and lighting
@@ -41,6 +43,7 @@ const SceneContent: React.FC<{
   gameStatus: 'playing' | 'completed';
   controlsRef: React.RefObject<OrbitControlsImpl | null>;
   colliderMode?: 'trimesh' | 'convex-hull';
+  marblePalette?: MarblePaletteId;
 }> = ({
   maze,
   controlMode,
@@ -54,6 +57,7 @@ const SceneContent: React.FC<{
   gameStatus,
   controlsRef,
   colliderMode = 'trimesh',
+  marblePalette,
 }) => {
   const totalWidth = maze.cols * maze.cellSize;
   const totalDepth = maze.rows * maze.cellSize;
@@ -275,6 +279,7 @@ const SceneContent: React.FC<{
           onGoalCheck={handleGoalCheck}
           slowMo={slowMo}
           tiltRef={tiltRef}
+          paletteId={marblePalette}
         />
       </Physics>
     </>

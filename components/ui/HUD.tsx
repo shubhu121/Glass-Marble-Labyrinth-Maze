@@ -18,10 +18,12 @@ import {
   ArrowRight,
   Shuffle,
   Compass,
+  Palette,
 } from 'lucide-react';
 import { MazeData, getCuratedPresets } from '@/lib/maze-generator';
 import { soundManager } from '@/lib/sound-effects';
 import { VirtualJoystick } from '@/components/controls/VirtualJoystick';
+import { MarblePaletteId, MARBLE_PALETTES } from '@/lib/marble-palettes';
 
 interface HUDProps {
   controlMode: 'board' | 'marble';
@@ -36,6 +38,8 @@ interface HUDProps {
   onChangeLighting: (preset: 'workshop' | 'studio' | 'sunset') => void;
   colliderMode?: 'trimesh' | 'convex-hull';
   onToggleColliderMode?: (mode: 'trimesh' | 'convex-hull') => void;
+  marblePalette: MarblePaletteId;
+  onChangeMarblePalette: (palette: MarblePaletteId) => void;
   currentMaze: MazeData;
   onSelectMaze: (maze: MazeData) => void;
   onGenerateNewMaze: () => void;
@@ -60,6 +64,8 @@ export const HUD: React.FC<HUDProps> = ({
   onChangeLighting,
   colliderMode = 'trimesh',
   onToggleColliderMode,
+  marblePalette,
+  onChangeMarblePalette,
   currentMaze,
   onSelectMaze,
   onGenerateNewMaze,
@@ -146,6 +152,55 @@ export const HUD: React.FC<HUDProps> = ({
 
         {/* Top-Right Quick Toggles */}
         <div className="pointer-events-auto flex items-center gap-1.5 bg-stone-900/80 backdrop-blur-md px-2 py-1.5 rounded-xl border border-stone-700/50 shadow-lg">
+          {/* Marble Color Palette Selector */}
+          <div className="flex items-center bg-stone-800/80 rounded-lg p-0.5 text-xs">
+            <div className="flex items-center gap-1.5 px-2 py-1 text-stone-300 select-none">
+              <Palette className="w-3.5 h-3.5 text-amber-400" />
+              <span className="hidden lg:inline text-[11px] text-stone-400 font-medium">Marble:</span>
+            </div>
+            {/* Quick Palette Swatch Buttons on XL screens */}
+            <div className="hidden xl:flex items-center gap-1 pr-1">
+              {MARBLE_PALETTES.map((p) => {
+                const isSelected = marblePalette === p.id;
+                return (
+                  <button
+                    key={p.id}
+                    id={`btn-palette-${p.id}`}
+                    onClick={() => onChangeMarblePalette(p.id)}
+                    title={`${p.name} — ${p.tagline}`}
+                    className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] transition-all ${
+                      isSelected
+                        ? 'bg-amber-700 text-amber-100 font-semibold shadow-sm ring-1 ring-amber-400/50'
+                        : 'text-stone-300 hover:text-white hover:bg-stone-700/60'
+                    }`}
+                  >
+                    <span
+                      className="w-2.5 h-2.5 rounded-full border border-white/20 shadow-sm"
+                      style={{ backgroundColor: p.primary }}
+                    />
+                    <span>{p.name}</span>
+                  </button>
+                );
+              })}
+            </div>
+            {/* Dropdown Selector for smaller screens */}
+            <div className="xl:hidden">
+              <select
+                id="select-marble-palette"
+                value={marblePalette}
+                onChange={(e) => onChangeMarblePalette(e.target.value as MarblePaletteId)}
+                title="Select Marble Internal Color Palette"
+                className="bg-stone-900/90 text-amber-200 text-xs rounded-md border border-stone-700/80 px-2 py-1 outline-none cursor-pointer"
+              >
+                {MARBLE_PALETTES.map((p) => (
+                  <option key={p.id} value={p.id} className="bg-stone-900 text-stone-200">
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
           {/* Lighting Presets */}
           <div className="flex items-center bg-stone-800/80 rounded-lg p-0.5 text-xs">
             <button
@@ -276,6 +331,12 @@ export const HUD: React.FC<HUDProps> = ({
                 <li>Scroll mouse wheel / pinch to zoom into the glass marble</li>
                 <li>Right-click drag to pan the camera</li>
               </ul>
+            </div>
+            <div>
+              <div className="font-medium text-amber-300 mb-1">🎨 Marble Internal Color Palettes</div>
+              <p className="text-stone-300">
+                Switch between handcrafted artisan glass palettes (Ocean Blue, Ruby Fire, Emerald Forest, Amethyst Twilight, and Classic Venetian). The Three.js custom shader uniforms and physical transmission refraction dynamically interpolate in real-time.
+              </p>
             </div>
             <div>
               <div className="font-medium text-amber-300 mb-1">📐 Precision Collision Geometry</div>

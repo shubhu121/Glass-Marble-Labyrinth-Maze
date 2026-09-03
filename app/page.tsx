@@ -5,6 +5,7 @@ import dynamic from 'next/dynamic';
 import { getCuratedPresets, generateMazeData, MazeData } from '@/lib/maze-generator';
 import { HUD } from '@/components/ui/HUD';
 import { Loader2 } from 'lucide-react';
+import { MarblePaletteId } from '@/lib/marble-palettes';
 
 // Dynamically import LabyrinthScene with SSR disabled for WebGL & Rapier Wasm
 const LabyrinthScene = dynamic(
@@ -32,6 +33,7 @@ export default function LabyrinthApp() {
   const [slowMo, setSlowMo] = useState<boolean>(false);
   const [lightingPreset, setLightingPreset] = useState<'workshop' | 'studio' | 'sunset'>('workshop');
   const [colliderMode, setColliderMode] = useState<'trimesh' | 'convex-hull'>('trimesh');
+  const [marblePalette, setMarblePalette] = useState<MarblePaletteId>('ocean-blue');
   const [gameStatus, setGameStatus] = useState<'playing' | 'completed'>('playing');
   const [completionTime, setCompletionTime] = useState<number>(0);
   const [mazeStartTime, setMazeStartTime] = useState<number>(() => Date.now());
@@ -171,6 +173,7 @@ export default function LabyrinthApp() {
         slowMo={slowMo}
         lightingPreset={lightingPreset}
         colliderMode={colliderMode}
+        marblePalette={marblePalette}
         onGoalReached={handleGoalReached}
         gameStatus={gameStatus}
         onResetCameraTrigger={(fn) => {
@@ -192,6 +195,8 @@ export default function LabyrinthApp() {
         onChangeLighting={setLightingPreset}
         colliderMode={colliderMode}
         onToggleColliderMode={setColliderMode}
+        marblePalette={marblePalette}
+        onChangeMarblePalette={setMarblePalette}
         currentMaze={currentMaze}
         onSelectMaze={handleSelectMaze}
         onGenerateNewMaze={handleGenerateNewMaze}
