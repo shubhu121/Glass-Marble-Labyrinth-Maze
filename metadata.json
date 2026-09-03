@@ -1,0 +1,6 @@
+{
+  "name": "Glass Marble Labyrinth Maze",
+  "description": "Realistic 3D wooden marble maze with physics-driven glass marble, smooth board tilting, solvable maze generator, and custom materials.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
